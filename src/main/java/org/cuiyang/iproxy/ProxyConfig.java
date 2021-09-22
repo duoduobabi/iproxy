@@ -3,6 +3,7 @@ package org.cuiyang.iproxy;
 import org.cuiyang.iproxy.handler.*;
 import org.cuiyang.iproxy.handler.http.HttpAuthHandler;
 import org.cuiyang.iproxy.handler.http.HttpConnectHandler;
+import org.cuiyang.iproxy.handler.http.TunnelConnectHandler;
 import org.cuiyang.iproxy.handler.socks.SocksAuthHandler;
 import org.cuiyang.iproxy.handler.socks.SocksConnectHandler;
 import io.netty.channel.EventLoopGroup;
@@ -30,6 +31,7 @@ public class ProxyConfig {
     private ProxyTypeHandler proxyTypeHandler;
     private HttpAuthHandler httpAuthHandler;
     private HttpConnectHandler httpConnectHandler;
+    private TunnelConnectHandler tunnelConnectHandler;
     private SocksAuthHandler socksAuthHandler;
     private SocksConnectHandler socksConnectHandler;
 
@@ -41,6 +43,7 @@ public class ProxyConfig {
                        ProxyTypeHandler proxyTypeHandler,
                        HttpAuthHandler httpAuthHandler,
                        HttpConnectHandler httpConnectHandler,
+                       TunnelConnectHandler tunnelConnectHandler,
                        SocksAuthHandler socksAuthHandler,
                        SocksConnectHandler socksConnectHandler) {
         this.port = port == null ? DEFAULT_PORT : port;
@@ -56,6 +59,7 @@ public class ProxyConfig {
         this.proxyTypeHandler = get(proxyTypeHandler, ProxyTypeHandler.class);
         this.httpAuthHandler = get(httpAuthHandler, HttpAuthHandler.class);
         this.httpConnectHandler = get(httpConnectHandler, HttpConnectHandler.class);
+        this.tunnelConnectHandler = get(tunnelConnectHandler, TunnelConnectHandler.class);
         this.socksAuthHandler = get(socksAuthHandler, SocksAuthHandler.class);
         this.socksConnectHandler = get(socksConnectHandler, SocksConnectHandler.class);
     }

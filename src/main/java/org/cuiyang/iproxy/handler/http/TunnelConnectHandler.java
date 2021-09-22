@@ -1,25 +1,26 @@
 package org.cuiyang.iproxy.handler.http;
 
-import io.netty.channel.*;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.util.concurrent.Promise;
-import org.cuiyang.iproxy.ProxyServerUtils;
-import org.cuiyang.iproxy.handler.AbstractConnectHandler;
-import org.cuiyang.iproxy.handler.DirectClientHandler;
-import org.cuiyang.iproxy.handler.RelayHandler;
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.*;
 import lombok.extern.slf4j.Slf4j;
+import org.cuiyang.iproxy.ProxyServerUtils;
+import org.cuiyang.iproxy.handler.AbstractConnectHandler;
+import org.cuiyang.iproxy.handler.RelayHandler;
 
 import java.net.InetSocketAddress;
 
 /**
- * http连接处理器
+ * http tunnel 连接处理器
  *
  * @author cuiyang
  */
 @Slf4j
 @ChannelHandler.Sharable
-public class HttpConnectHandler extends AbstractConnectHandler<HttpRequest> {
+public class TunnelConnectHandler extends AbstractConnectHandler<HttpRequest> {
 
     @Override
     public void channelRead0(ChannelHandlerContext ctx, HttpRequest request) {
@@ -30,7 +31,13 @@ public class HttpConnectHandler extends AbstractConnectHandler<HttpRequest> {
     @Override
     protected void connectSuccess(ChannelHandlerContext ctx, HttpRequest request,
                                   Channel inboundChannel, Channel outboundChannel) {
-        ChannelFuture responseFuture = outboundChannel.writeAndFlush(request);
+        ChannelFuture responseFuture;
+        if (request.method().equals(HttpMethod.CONNECT) && config.getProxyFactory() == null) {
+            responseFuture = inboundChannel.writeAndFlush(new DefaultFullHttpResponse(request.protocolVersion(), HttpResponseStatus.OK));
+        } else {
+            ByteBuf byteBuf = ProxyServerUtils.http2byteBuf(request);
+            responseFuture = outboundChannel.writeAndFlush(byteBuf);
+        }
         responseFuture.addListener(channelFuture -> {
             if (!channelFuture.isSuccess()) {
                 log.debug("Http请求失败", channelFuture.cause());
@@ -38,33 +45,17 @@ public class HttpConnectHandler extends AbstractConnectHandler<HttpRequest> {
                 ProxyServerUtils.closeOnFlush(outboundChannel);
                 return;
             }
-            ctx.pipeline().remove(HttpConnectHandler.this);
+            ctx.pipeline().remove(TunnelConnectHandler.this);
+            ctx.pipeline().remove(HttpServerCodec.class);
             outboundChannel.pipeline().addLast(new RelayHandler(inboundChannel));
             ctx.pipeline().addLast(new RelayHandler(outboundChannel));
         });
     }
 
     @Override
-    protected ChannelHandler handler(ChannelHandlerContext ctx, HttpRequest request) {
-        if (request.method().equals(HttpMethod.CONNECT)) {
-            return super.handler(ctx, request);
-        } else {
-            Promise<Channel> promise = ctx.executor().newPromise();
-            promise.addListener(handleConnect(ctx, request));
-            return new ChannelInitializer<SocketChannel>() {
-                @Override
-                protected void initChannel(SocketChannel ch) {
-                    ch.pipeline().addLast(new HttpClientCodec());
-                    ch.pipeline().addLast(new DirectClientHandler(promise));
-                }
-            };
-        }
-    }
-
-    @Override
     protected void connectFail(ChannelHandlerContext ctx, HttpRequest request,
                                Channel inboundChannel, Channel outboundChannel, Throwable cause) {
-        log.debug("Http响应失败", cause);
+        log.debug("HttpTunnel响应失败", cause);
         ProxyServerUtils.closeOnFlush(inboundChannel);
         ProxyServerUtils.closeOnFlush(outboundChannel);
     }

@@ -53,7 +53,11 @@ public class HttpAuthHandler extends AbstractAuthHandler<HttpRequest> {
             headers.remove(proxyConnectionKey);
             headers.set(HttpHeaderNames.CONNECTION, header);
         }
-        ctx.pipeline().addLast(config.getHttpConnectHandler());
+        if (request.method().equals(HttpMethod.CONNECT)) {
+            ctx.pipeline().addLast(config.getTunnelConnectHandler());
+        } else {
+            ctx.pipeline().addLast(config.getHttpConnectHandler());
+        }
         ctx.pipeline().remove(this);
         ctx.fireChannelRead(request);
     }
