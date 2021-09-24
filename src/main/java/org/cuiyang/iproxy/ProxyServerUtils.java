@@ -25,9 +25,14 @@ public final class ProxyServerUtils {
     private ProxyServerUtils() {
     }
 
-    public static void closeOnFlush(Channel ch) {
-        if (ch.isActive()) {
-            ch.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
+    public static void closeOnFlush(Channel... chs) {
+        for (Channel ch : chs) {
+            try {
+                if (ch.isActive()) {
+                    ch.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
+                }
+            } catch (Exception ignore){
+            }
         }
     }
 

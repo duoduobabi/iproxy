@@ -2,13 +2,12 @@ package org.cuiyang.iproxy.handler.http;
 
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.util.concurrent.Promise;
+import io.netty.handler.codec.http.HttpClientCodec;
+import io.netty.handler.codec.http.HttpRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.cuiyang.iproxy.ProxyServerUtils;
 import org.cuiyang.iproxy.handler.AbstractConnectHandler;
-import org.cuiyang.iproxy.handler.DirectClientHandler;
 import org.cuiyang.iproxy.handler.RelayHandler;
-import io.netty.handler.codec.http.*;
-import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetSocketAddress;
 
@@ -34,39 +33,31 @@ public class HttpConnectHandler extends AbstractConnectHandler<HttpRequest> {
         responseFuture.addListener(channelFuture -> {
             if (!channelFuture.isSuccess()) {
                 log.debug("Http请求失败", channelFuture.cause());
-                ProxyServerUtils.closeOnFlush(inboundChannel);
-                ProxyServerUtils.closeOnFlush(outboundChannel);
+                ProxyServerUtils.closeOnFlush(inboundChannel, outboundChannel);
                 return;
             }
-            ctx.pipeline().remove(HttpConnectHandler.this);
+            inboundChannel.pipeline().remove(HttpConnectHandler.this);
+            inboundChannel.pipeline().addLast(new RelayHandler(outboundChannel));
             outboundChannel.pipeline().addLast(new RelayHandler(inboundChannel));
-            ctx.pipeline().addLast(new RelayHandler(outboundChannel));
         });
     }
 
     @Override
     protected ChannelHandler handler(ChannelHandlerContext ctx, HttpRequest request) {
-        if (request.method().equals(HttpMethod.CONNECT)) {
-            return super.handler(ctx, request);
-        } else {
-            Promise<Channel> promise = ctx.executor().newPromise();
-            promise.addListener(handleConnect(ctx, request));
-            return new ChannelInitializer<SocketChannel>() {
-                @Override
-                protected void initChannel(SocketChannel ch) {
-                    ch.pipeline().addLast(new HttpClientCodec());
-                    ch.pipeline().addLast(new DirectClientHandler(promise));
-                }
-            };
-        }
+        return new ChannelInitializer<SocketChannel>() {
+            @Override
+            protected void initChannel(SocketChannel ch) {
+                ch.pipeline().addLast(new HttpClientCodec());
+                ch.pipeline().addLast(HttpConnectHandler.super.handler(ctx, request));
+            }
+        };
     }
 
     @Override
     protected void connectFail(ChannelHandlerContext ctx, HttpRequest request,
                                Channel inboundChannel, Channel outboundChannel, Throwable cause) {
         log.debug("Http响应失败", cause);
-        ProxyServerUtils.closeOnFlush(inboundChannel);
-        ProxyServerUtils.closeOnFlush(outboundChannel);
+        ProxyServerUtils.closeOnFlush(inboundChannel, outboundChannel);
     }
 
     @Override

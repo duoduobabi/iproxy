@@ -41,14 +41,13 @@ public class TunnelConnectHandler extends AbstractConnectHandler<HttpRequest> {
         responseFuture.addListener(channelFuture -> {
             if (!channelFuture.isSuccess()) {
                 log.debug("Http请求失败", channelFuture.cause());
-                ProxyServerUtils.closeOnFlush(inboundChannel);
-                ProxyServerUtils.closeOnFlush(outboundChannel);
+                ProxyServerUtils.closeOnFlush(inboundChannel, outboundChannel);
                 return;
             }
-            ctx.pipeline().remove(TunnelConnectHandler.this);
-            ctx.pipeline().remove(HttpServerCodec.class);
+            inboundChannel.pipeline().remove(TunnelConnectHandler.this);
+            inboundChannel.pipeline().remove(HttpServerCodec.class);
+            inboundChannel.pipeline().addLast(new RelayHandler(outboundChannel));
             outboundChannel.pipeline().addLast(new RelayHandler(inboundChannel));
-            ctx.pipeline().addLast(new RelayHandler(outboundChannel));
         });
     }
 
@@ -56,8 +55,7 @@ public class TunnelConnectHandler extends AbstractConnectHandler<HttpRequest> {
     protected void connectFail(ChannelHandlerContext ctx, HttpRequest request,
                                Channel inboundChannel, Channel outboundChannel, Throwable cause) {
         log.debug("HttpTunnel响应失败", cause);
-        ProxyServerUtils.closeOnFlush(inboundChannel);
-        ProxyServerUtils.closeOnFlush(outboundChannel);
+        ProxyServerUtils.closeOnFlush(inboundChannel, outboundChannel);
     }
 
     @Override

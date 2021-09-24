@@ -43,6 +43,10 @@ public class HttpAuthHandler extends AbstractAuthHandler<HttpRequest> {
         }
     }
 
+    protected boolean mitm(ChannelHandlerContext ctx, HttpRequest request) {
+        return config.getMitmManager() != null;
+    }
+
     @Override
     protected void authenticateSuccess(ChannelHandlerContext ctx, HttpRequest request) {
         HttpHeaders headers = request.headers();
@@ -54,7 +58,11 @@ public class HttpAuthHandler extends AbstractAuthHandler<HttpRequest> {
             headers.set(HttpHeaderNames.CONNECTION, header);
         }
         if (request.method().equals(HttpMethod.CONNECT)) {
-            ctx.pipeline().addLast(config.getTunnelConnectHandler());
+            if (mitm(ctx, request)) {
+                ctx.pipeline().addLast(config.getHttpMitmConnectHandler());
+            } else {
+                ctx.pipeline().addLast(config.getTunnelConnectHandler());
+            }
         } else {
             ctx.pipeline().addLast(config.getHttpConnectHandler());
         }

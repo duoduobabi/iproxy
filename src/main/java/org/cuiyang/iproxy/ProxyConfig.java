@@ -3,6 +3,7 @@ package org.cuiyang.iproxy;
 import org.cuiyang.iproxy.handler.*;
 import org.cuiyang.iproxy.handler.http.HttpAuthHandler;
 import org.cuiyang.iproxy.handler.http.HttpConnectHandler;
+import org.cuiyang.iproxy.handler.http.HttpMitmConnectHandler;
 import org.cuiyang.iproxy.handler.http.TunnelConnectHandler;
 import org.cuiyang.iproxy.handler.socks.SocksAuthHandler;
 import org.cuiyang.iproxy.handler.socks.SocksConnectHandler;
@@ -28,10 +29,12 @@ public class ProxyConfig {
     private EventLoopGroup workerGroup;
     private ProxyAuthenticator proxyAuthenticator;
     private ProxyFactory proxyFactory;
+    private MitmManager mitmManager;
     private ProxyTypeHandler proxyTypeHandler;
     private HttpAuthHandler httpAuthHandler;
     private HttpConnectHandler httpConnectHandler;
     private TunnelConnectHandler tunnelConnectHandler;
+    private HttpMitmConnectHandler httpMitmConnectHandler;
     private SocksAuthHandler socksAuthHandler;
     private SocksConnectHandler socksConnectHandler;
 
@@ -40,10 +43,12 @@ public class ProxyConfig {
                        EventLoopGroup bossGroup, EventLoopGroup workerGroup,
                        ProxyAuthenticator proxyAuthenticator,
                        ProxyFactory proxyFactory,
+                       MitmManager mitmManager,
                        ProxyTypeHandler proxyTypeHandler,
                        HttpAuthHandler httpAuthHandler,
                        HttpConnectHandler httpConnectHandler,
                        TunnelConnectHandler tunnelConnectHandler,
+                       HttpMitmConnectHandler httpMitmConnectHandler,
                        SocksAuthHandler socksAuthHandler,
                        SocksConnectHandler socksConnectHandler) {
         this.port = port == null ? DEFAULT_PORT : port;
@@ -52,6 +57,7 @@ public class ProxyConfig {
 
         this.proxyAuthenticator = holdConfig(proxyAuthenticator);
         this.proxyFactory = holdConfig(proxyFactory);
+        this.mitmManager = holdConfig(mitmManager);
 
         this.bossGroup = bossGroup == null ? new NioEventLoopGroup(1) : bossGroup;
         this.workerGroup = workerGroup == null ? new NioEventLoopGroup() : workerGroup;
@@ -60,6 +66,7 @@ public class ProxyConfig {
         this.httpAuthHandler = get(httpAuthHandler, HttpAuthHandler.class);
         this.httpConnectHandler = get(httpConnectHandler, HttpConnectHandler.class);
         this.tunnelConnectHandler = get(tunnelConnectHandler, TunnelConnectHandler.class);
+        this.httpMitmConnectHandler = get(httpMitmConnectHandler, HttpMitmConnectHandler.class);
         this.socksAuthHandler = get(socksAuthHandler, SocksAuthHandler.class);
         this.socksConnectHandler = get(socksConnectHandler, SocksConnectHandler.class);
     }
