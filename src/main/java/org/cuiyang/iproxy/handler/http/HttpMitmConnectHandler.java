@@ -1,5 +1,6 @@
 package org.cuiyang.iproxy.handler.http;
 
+import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.*;
@@ -58,12 +59,50 @@ public class HttpMitmConnectHandler extends AbstractConnectHandler<HttpRequest> 
     }
 
     @Override
+    protected void handleConnectResult(ChannelHandlerContext ctx, HttpRequest request, ChannelFuture channelFuture) {
+        super.handleConnectResult(ctx, request, channelFuture);
+        if (config.getProxyFactory() != null) {
+            channelFuture.addListener(f -> {
+                if (f.isSuccess()) {
+                    InetSocketAddress address = getTargetAddress(request);
+                    Channel ch = channelFuture.channel();
+                    HttpRequest connect = new DefaultFullHttpRequest(
+                            request.protocolVersion(), HttpMethod.CONNECT, address.getHostString() + ":" + address.getPort(), Unpooled.EMPTY_BUFFER);
+                    ch.writeAndFlush(connect).addListener(f2 -> {
+                        if (!f2.isSuccess()) {
+                            ProxyServerUtils.closeOnFlush(ch);
+                            ProxyServerUtils.closeOnFlush(ctx.channel());
+                        }
+                    });
+                }
+            });
+        }
+    }
+
+    @Override
     protected ChannelHandler handler(ChannelHandlerContext ctx, HttpRequest request) {
+        ChannelHandler superHandler = super.handler(ctx, request);
         return new ChannelInitializer<SocketChannel>() {
             @Override
             protected void initChannel(SocketChannel ch) {
-                ch.pipeline().addLast(new HttpClientCodec());
-                ch.pipeline().addLast(HttpMitmConnectHandler.super.handler(ctx, request));
+                if (config.getProxyFactory() == null) {
+                    ch.pipeline().addLast(new HttpClientCodec());
+                    ch.pipeline().addLast(superHandler);
+                } else {
+                    ch.pipeline().addLast(new HttpClientCodec());
+                    ch.pipeline().addLast(new SimpleChannelInboundHandler<HttpResponse>() {
+                        @Override
+                        protected void channelRead0(ChannelHandlerContext ctx, HttpResponse msg) {
+                            Channel ch = ctx.channel();
+                            ChannelPipeline pipeline = ch.pipeline();
+                            pipeline.remove(HttpClientCodec.class);
+                            pipeline.remove(this);
+                            ch.pipeline().addLast(new HttpClientCodec());
+                            pipeline.addLast(superHandler);
+                            pipeline.fireChannelActive();
+                        }
+                    });
+                }
             }
         };
     }
@@ -77,6 +116,6 @@ public class HttpMitmConnectHandler extends AbstractConnectHandler<HttpRequest> 
 
     @Override
     protected InetSocketAddress getTargetAddress(HttpRequest request) {
-        return ProxyServerUtils.httpAddress(request, 80);
+        return ProxyServerUtils.httpAddress(request, 443);
     }
 }

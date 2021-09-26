@@ -13,7 +13,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 public class RelayHandler extends ChannelInboundHandlerAdapter {
-    private final Channel relayChannel;
+    protected final Channel relayChannel;
 
     public RelayHandler(Channel relayChannel) {
         this.relayChannel = relayChannel;

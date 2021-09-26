@@ -60,6 +60,6 @@ public class TunnelConnectHandler extends AbstractConnectHandler<HttpRequest> {
 
     @Override
     protected InetSocketAddress getTargetAddress(HttpRequest request) {
-        return ProxyServerUtils.httpAddress(request, 80);
+        return ProxyServerUtils.httpAddress(request, 443);
     }
 }
