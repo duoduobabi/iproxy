@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration scan="false" debug="false">
-    <property name="pattern" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %p %m%n"/>
+    <property name="pattern" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %p %c %m%n"/>
 
     <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
         <!--定义输出格式-->
