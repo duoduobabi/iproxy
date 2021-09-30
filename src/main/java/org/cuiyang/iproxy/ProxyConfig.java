@@ -19,7 +19,7 @@ import lombok.SneakyThrows;
 public class ProxyConfig {
 
     private static final int DEFAULT_PORT = 8080;
-    private static final int DEFAULT_CONNECT_TIMEOUT = 10000;
+    private static final int DEFAULT_CONNECT_TIMEOUT = 1000;
     private static final int DEFAULT_CONNECT_RETRY_TIMES = 0;
 
     private int port;

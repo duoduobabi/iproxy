@@ -1,5 +1,6 @@
 package org.cuiyang.iproxy.handler.http;
 
+import org.cuiyang.iproxy.Connection;
 import org.cuiyang.iproxy.handler.AbstractAuthHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -36,15 +37,11 @@ public class HttpAuthHandler extends AbstractAuthHandler<HttpRequest> {
             }
         }
         if (authenticate(username, password)) {
-            setAttributes(ctx, request, username);
+            buildConnection(ctx, request, username);
             authenticateSuccess(ctx, request);
         } else {
             authenticateFail(ctx, request);
         }
-    }
-
-    protected boolean mitm(ChannelHandlerContext ctx, HttpRequest request) {
-        return config.getMitmManager() != null;
     }
 
     @Override
@@ -58,7 +55,7 @@ public class HttpAuthHandler extends AbstractAuthHandler<HttpRequest> {
             headers.set(HttpHeaderNames.CONNECTION, header);
         }
         if (request.method().equals(HttpMethod.CONNECT)) {
-            if (mitm(ctx, request)) {
+            if (Connection.currentConnection(ctx).isMitm()) {
                 ctx.pipeline().addLast(config.getHttpMitmConnectHandler());
             } else {
                 ctx.pipeline().addLast(config.getTunnelConnectHandler());

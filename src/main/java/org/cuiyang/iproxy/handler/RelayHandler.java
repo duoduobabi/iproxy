@@ -40,7 +40,6 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.debug("RelayHandler", cause);
         ctx.close();
     }
 }

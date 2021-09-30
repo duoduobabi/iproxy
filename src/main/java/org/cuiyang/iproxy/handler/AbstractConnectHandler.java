@@ -1,18 +1,16 @@
 package org.cuiyang.iproxy.handler;
 
-import org.cuiyang.iproxy.*;
-import org.cuiyang.iproxy.handler.http.HttpConnectHandler;
-import org.cuiyang.iproxy.handler.socks.SocksConnectHandler;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.util.Attribute;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.socksx.v5.Socks5CommandRequest;
 import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
+import org.cuiyang.iproxy.*;
 
 import java.net.InetSocketAddress;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 连接处理器基类
@@ -27,108 +25,105 @@ public abstract class AbstractConnectHandler<T> extends SimpleChannelInboundHand
 
     @Override
     public void channelRead0(ChannelHandlerContext ctx, T request) {
-        ChannelFuture channelFuture = connect(ctx, request);
-        handleConnectResult(ctx, request, channelFuture);
-    }
-
-    /**
-     * 建立连接
-     */
-    protected ChannelFuture connect(ChannelHandlerContext ctx, T request) {
-        Bootstrap b = bootstrap(ctx, request);
-
-        InetSocketAddress address;
-        if (config.getProxyFactory() != null) {
-            Proxy.Type type = null;
-            if (this instanceof HttpConnectHandler) {
-                type = Proxy.Type.HTTP;
-            } else if (this instanceof SocksConnectHandler) {
-                type = Proxy.Type.SOCKS;
-            }
-            Proxy proxy = config.getProxyFactory().getProxy(type);
-            address = (InetSocketAddress) proxy.address();
-        } else {
-            address = getTargetAddress(request);
+        Connection connection = Connection.currentConnection(ctx);
+        if (connection.getServerAddress() == null) {
+            connection.setServerAddress(getTargetAddress(request));
         }
-        return b.connect(address);
-    }
-
-    /**
-     * 处理连接结果
-     */
-    protected void handleConnectResult(ChannelHandlerContext ctx, T request, ChannelFuture channelFuture) {
-        Attribute<Integer> connectRetryTimes = ctx.channel().attr(Attributes.CONNECT_RETRY_TIMES);
-        AtomicInteger times = new AtomicInteger();
-        channelFuture.addListener(future -> {
-            if (!future.isSuccess()) {
-                log.debug("连接失败");
-                if (times.getAndIncrement() < connectRetryTimes.get()) {
-                    this.channelRead0(ctx, request);
-                } else {
-                    ProxyServerUtils.closeOnFlush(ctx.channel());
-                }
-            }
-        });
+        Bootstrap bootstrap = bootstrap(ctx, connection, request);
+        connect(ctx, connection, request, bootstrap);
     }
 
     /**
      * bootstrap
      */
-    protected Bootstrap bootstrap(ChannelHandlerContext ctx, T request) {
-        Attribute<Integer> connectTimeout = ctx.channel().attr(Attributes.CONNECT_TIMEOUT);
+    protected Bootstrap bootstrap(ChannelHandlerContext ctx, Connection connection, T request) {
         Bootstrap b = new Bootstrap();
         b.group(ctx.channel().eventLoop())
                 .channel(NioSocketChannel.class)
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout.get())
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connection.getConnectTimeout())
                 .option(ChannelOption.SO_KEEPALIVE, true)
-                .handler(handler(ctx, request));
+                .handler(handler(ctx, connection, request));
         return b;
     }
 
     /**
      * 处理器
      */
-    protected ChannelHandler handler(ChannelHandlerContext ctx, T request) {
+    protected ChannelHandler handler(ChannelHandlerContext ctx, Connection connection, T request) {
         Promise<Channel> promise = ctx.executor().newPromise();
-        promise.addListener(handleConnect(ctx, request));
+        promise.addListener((FutureListener<Channel>) future -> {
+            // 设置代理到服务端的Channel
+            connection.setOutboundChannel(future.getNow());
+            if (future.isSuccess()) {
+                connectSuccess(ctx, connection, request);
+            } else {
+                // 连接失败重试
+                int connectRetryTimes = connection.getConnectRetryTimes();
+                if (connectRetryTimes > 0) {
+                    connection.setConnectRetryTimes(--connectRetryTimes);
+                    this.channelRead0(ctx, request);
+                } else {
+                    connectFail(ctx, connection, request, future.cause());
+                }
+            }
+        });
         return new DirectClientHandler(promise);
     }
 
     /**
-     * 处理连接
+     * 建立连接
      */
-    protected FutureListener<Channel> handleConnect(ChannelHandlerContext ctx, T request) {
-        final Channel inboundChannel = ctx.channel();
-        return future -> {
-            final Channel outboundChannel = future.getNow();
-            if (future.isSuccess()) {
-                connectSuccess(ctx, request, inboundChannel, outboundChannel);
+    protected void connect(ChannelHandlerContext ctx, Connection connection, T request, Bootstrap bootstrap) {
+        InetSocketAddress address;
+        if (config.getProxyFactory() != null) {
+            Proxy.Type type;
+            if (request instanceof HttpRequest) {
+                type = Proxy.Type.HTTP;
             } else {
-                connectFail(ctx, request, inboundChannel, outboundChannel, future.cause());
+                type = Proxy.Type.SOCKS;
             }
-        };
+            Proxy proxy = config.getProxyFactory().getProxy(type);
+            address = (InetSocketAddress) proxy.address();
+        } else {
+            address = connection.getServerAddress();
+        }
+        bootstrap.connect(address);
     }
 
     /**
      * 连接成功
      */
-    protected abstract void connectSuccess(ChannelHandlerContext ctx, T request,
-                                           Channel inboundChannel, Channel outboundChannel);
+    protected void connectSuccess(ChannelHandlerContext ctx, Connection connection, T request) {
+        connection.getInboundPipeline().remove(this);
+        connection.connect();
+    }
 
     /**
      * 连接失败
      */
-    protected abstract void connectFail(ChannelHandlerContext ctx, T request,
-                                        Channel inboundChannel, Channel outboundChannel, Throwable cause);
+    protected void connectFail(ChannelHandlerContext ctx, Connection connection, T request, Throwable cause) {
+        log.debug("连接失败", cause);
+        connection.close();
+    }
 
     /**
      * 目标地址
      */
-    protected abstract InetSocketAddress getTargetAddress(T request);
+    protected InetSocketAddress getTargetAddress(T msg) {
+        if (msg instanceof HttpRequest) {
+            HttpRequest request = (HttpRequest) msg;
+            return ProxyServerUtils.httpAddress(request, 80);
+        } else if (msg instanceof Socks5CommandRequest) {
+            Socks5CommandRequest request = (Socks5CommandRequest) msg;
+            return InetSocketAddress.createUnresolved(request.dstAddr(), request.dstPort());
+        } else {
+            throw new IllegalStateException("非法的消息 - " + msg.getClass());
+        }
+    }
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.error("连接处理异常", cause);
+        log.error("连接处理器异常", cause);
         ProxyServerUtils.closeOnFlush(ctx.channel());
     }
 

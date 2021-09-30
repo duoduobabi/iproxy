@@ -1,9 +1,6 @@
 package org.cuiyang.iproxy.handler;
 
-import org.cuiyang.iproxy.Attributes;
-import org.cuiyang.iproxy.ProxyConfig;
-import org.cuiyang.iproxy.ProxyConfigHolder;
-import org.cuiyang.iproxy.ProxyServerUtils;
+import org.cuiyang.iproxy.*;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -35,15 +32,17 @@ public abstract class AbstractAuthHandler<T> extends SimpleChannelInboundHandler
     }
 
     /**
-     * 设置属性
+     * 构建Connection
      */
-    protected void setAttributes(ChannelHandlerContext ctx, T request, String username) {
-        // 认证用户
-        ctx.channel().attr(Attributes.USERNAME).set(username);
-        // 连接超时
-        ctx.channel().attr(Attributes.CONNECT_TIMEOUT).set(config.getConnectTimeout());
-        // 连接重试次数
-        ctx.channel().attr(Attributes.CONNECT_RETRY_TIMES).set(config.getConnectRetryTimes());
+    protected void buildConnection(ChannelHandlerContext ctx, T request, String username) {
+        Connection connection = Connection.builder()
+                .inboundChannel(ctx.channel())
+                .username(username)
+                .mitm(config.getMitmManager() != null)
+                .connectTimeout(config.getConnectTimeout())
+                .connectRetryTimes(config.getConnectRetryTimes())
+                .build();
+        ctx.channel().attr(Attributes.CONNECTION).set(connection);
     }
 
     /**
@@ -58,7 +57,7 @@ public abstract class AbstractAuthHandler<T> extends SimpleChannelInboundHandler
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.error("认证处理异常", cause);
+        log.error("认证处理器异常", cause);
         ProxyServerUtils.closeOnFlush(ctx.channel());
     }
 

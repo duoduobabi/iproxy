@@ -7,7 +7,7 @@ public class ProxyServerTest {
 
     public static void main(String[] args) {
         ProxyServer proxyServer = new ProxyServer(ProxyConfig.builder()
-//                .proxyFactory(type -> Proxy.createHttpProxy("127.0.0.1", 8888))
+                .proxyFactory(type -> Proxy.createHttpProxy("127.0.0.1", 8888))
                 .mitmManager(new DefaultMitmManagerImpl(Authority.builder().build()))
                 .build());
         proxyServer.start();

@@ -1,5 +1,6 @@
 package org.cuiyang.iproxy.handler.socks;
 
+import org.cuiyang.iproxy.Attributes;
 import org.cuiyang.iproxy.ProxyServerUtils;
 import org.cuiyang.iproxy.handler.AbstractAuthHandler;
 import io.netty.channel.ChannelHandler;
@@ -36,7 +37,7 @@ public class SocksAuthHandler extends AbstractAuthHandler<SocksMessage> {
                 } else if (socksRequest instanceof Socks5PasswordAuthRequest) {
                     DefaultSocks5PasswordAuthRequest request = (DefaultSocks5PasswordAuthRequest) socksRequest;
                     if (authenticate(request.username(), request.password())) {
-                        setAttributes(ctx, request, request.username());
+                        ctx.channel().attr(Attributes.USERNAME).set(request.username());
                         ctx.pipeline().addFirst(new Socks5CommandRequestDecoder());
                         ctx.writeAndFlush(new DefaultSocks5PasswordAuthResponse(Socks5PasswordAuthStatus.SUCCESS));
                     } else {
@@ -45,6 +46,7 @@ public class SocksAuthHandler extends AbstractAuthHandler<SocksMessage> {
                 } else if (socksRequest instanceof Socks5CommandRequest) {
                     Socks5CommandRequest request = (Socks5CommandRequest) socksRequest;
                     if (request.type() == Socks5CommandType.CONNECT) {
+                        buildConnection(ctx, request, ctx.channel().attr(Attributes.USERNAME).get());
                         authenticateSuccess(ctx, request);
                     } else {
                         ProxyServerUtils.closeOnFlush(ctx.channel());

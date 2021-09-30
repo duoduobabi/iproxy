@@ -1,6 +1,5 @@
 package org.cuiyang.iproxy;
 
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -28,7 +27,7 @@ public final class ProxyServerUtils {
     public static void closeOnFlush(Channel... chs) {
         for (Channel ch : chs) {
             try {
-                if (ch.isActive()) {
+                if (ch != null && ch.isActive()) {
                     ch.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
                 }
             } catch (Exception ignore){
