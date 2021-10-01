@@ -58,7 +58,7 @@ public class HttpAuthHandler extends AbstractAuthHandler<HttpRequest> {
             if (Connection.currentConnection(ctx).isMitm()) {
                 ctx.pipeline().addLast(config.getHttpMitmConnectHandler());
             } else {
-                ctx.pipeline().addLast(config.getTunnelConnectHandler());
+                ctx.pipeline().addLast(config.getHttpTunnelConnectHandler());
             }
         } else {
             ctx.pipeline().addLast(config.getHttpConnectHandler());

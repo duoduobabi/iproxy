@@ -3,7 +3,9 @@ package org.cuiyang.iproxy;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
+import io.netty.channel.EventLoop;
 import io.netty.util.ReferenceCounted;
+import io.netty.util.concurrent.Promise;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,9 +23,9 @@ import java.util.List;
 @AllArgsConstructor
 public class Connection implements Closeable {
     /** 客户端到代理 */
-    private Channel inboundChannel;
+    private Channel clientChannel;
     /** 代理到服务端 */
-    private Channel outboundChannel;
+    private Channel serverChannel;
     /** 服务端地址 */
     private InetSocketAddress serverAddress;
     /** 认证用户 */
@@ -37,9 +39,34 @@ public class Connection implements Closeable {
     @Builder.Default
     private List<Object> messages = new ArrayList<>();
 
+    public static Connection currentConnection(ChannelHandlerContext ctx) {
+        return ctx.channel().attr(Attributes.CONNECTION).get();
+    }
+
+    public ChannelPipeline getClientPipeline() {
+        return clientChannel.pipeline();
+    }
+
+    public ChannelPipeline getServerPipeline() {
+        return serverChannel.pipeline();
+    }
+
+    public void connect() {
+        getClientPipeline().addLast(new RelayHandler(serverChannel));
+        getServerPipeline().addLast(new RelayHandler(clientChannel));
+    }
+
+    public EventLoop eventLoop() {
+        return clientChannel.eventLoop();
+    }
+
+    public <V> Promise<V> newPromise() {
+        return this.eventLoop().newPromise();
+    }
+
     public void write(Object msg) {
-        if (outboundChannel != null) {
-            outboundChannel.writeAndFlush(msg);
+        if (serverChannel != null) {
+            serverChannel.writeAndFlush(msg);
         } else {
             if (msg instanceof ReferenceCounted) {
                 ((ReferenceCounted) msg).retain();
@@ -49,33 +76,12 @@ public class Connection implements Closeable {
     }
 
     public void flush() {
-        messages.forEach(msg -> inboundChannel.pipeline().fireChannelRead(msg));
+        messages.forEach(msg -> clientChannel.pipeline().fireChannelRead(msg));
         messages.clear();
-    }
-
-    public static Connection currentConnection(ChannelHandlerContext ctx) {
-        return ctx.channel().attr(Attributes.CONNECTION).get();
-    }
-
-    public Connection(Channel inboundChannel) {
-        this.inboundChannel = inboundChannel;
-    }
-
-    public ChannelPipeline getInboundPipeline() {
-        return inboundChannel.pipeline();
-    }
-
-    public ChannelPipeline getOutboundPipeline() {
-        return outboundChannel.pipeline();
-    }
-
-    public void connect() {
-        getInboundPipeline().addLast(new RelayHandler(outboundChannel));
-        getOutboundPipeline().addLast(new RelayHandler(inboundChannel));
     }
 
     @Override
     public void close() {
-        ProxyServerUtils.closeOnFlush(inboundChannel, outboundChannel);
+        ProxyServerUtils.closeOnFlush(clientChannel, serverChannel);
     }
 }

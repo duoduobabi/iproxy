@@ -14,29 +14,29 @@ import org.cuiyang.iproxy.Connection;
  */
 @Slf4j
 @ChannelHandler.Sharable
-public class TunnelConnectHandler extends HttpConnectHandler {
+public class HttpTunnelConnectHandler extends HttpConnectHandler {
 
     @Override
-    protected void connectSuccess(ChannelHandlerContext ctx, Connection connection, HttpObject msg) {
+    protected void connectSuccess(Connection connection, HttpObject msg) {
         if (config.getProxyFactory() == null) {
-            connectSuccess0(ctx, connection, msg);
+            connectSuccess0(connection, msg);
         } else {
             HttpRequest request = (HttpRequest) msg;
-            Promise<Channel> promise = ctx.executor().newPromise();
+            Promise<Channel> promise = connection.newPromise();
             promise.addListener((FutureListener<Channel>) future -> {
                 if (future.isSuccess()) {
-                    connectSuccess0(ctx, connection, request);
+                    connectSuccess0(connection, request);
                 } else {
-                    connectFail(ctx, connection, request, future.cause());
+                    connectFail(connection, request, future.cause());
                 }
             });
-            connection.getOutboundPipeline().addLast(new HttpClientCodec());
-            connection.getOutboundPipeline().addLast(new SimpleChannelInboundHandler<HttpResponse>() {
+            connection.getServerPipeline().addLast(new HttpClientCodec());
+            connection.getServerPipeline().addLast(new SimpleChannelInboundHandler<HttpResponse>() {
                 @Override
                 protected void channelRead0(ChannelHandlerContext ctx, HttpResponse msg) {
                     ctx.pipeline().remove(this);
                     if (HttpResponseStatus.OK.equals(msg.status())) {
-                        connection.getOutboundPipeline().remove(HttpClientCodec.class);
+                        connection.getServerPipeline().remove(HttpClientCodec.class);
                         promise.setSuccess(ctx.channel());
                     } else {
                         promise.setFailure(new IllegalStateException("Http Connect响应" + msg.status().code()));
@@ -48,21 +48,21 @@ public class TunnelConnectHandler extends HttpConnectHandler {
                     promise.setFailure(cause);
                 }
             });
-            connection.getOutboundPipeline().writeAndFlush(request);
+            connection.getServerPipeline().writeAndFlush(request);
         }
     }
 
-    protected void connectSuccess0(ChannelHandlerContext ctx, Connection connection, HttpObject msg) {
+    protected void connectSuccess0(Connection connection, HttpObject msg) {
         HttpRequest request = (HttpRequest) msg;
-        ChannelFuture responseFuture = connection.getInboundChannel()
+        ChannelFuture responseFuture = connection.getClientChannel()
                 .writeAndFlush(new DefaultFullHttpResponse(request.protocolVersion(), HttpResponseStatus.OK));
         responseFuture.addListener(f -> {
             if (!f.isSuccess()) {
-                connectFail(ctx, connection, msg, f.cause());
+                connectFail(connection, msg, f.cause());
                 return;
             }
-            connection.getInboundPipeline().remove(this);
-            connection.getInboundPipeline().remove(HttpServerCodec.class);
+            connection.getClientPipeline().remove(this);
+            connection.getClientPipeline().remove(HttpServerCodec.class);
             connection.connect();
         });
     }

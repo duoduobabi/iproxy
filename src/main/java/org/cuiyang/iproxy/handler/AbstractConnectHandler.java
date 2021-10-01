@@ -29,42 +29,36 @@ public abstract class AbstractConnectHandler<T> extends SimpleChannelInboundHand
         if (connection.getServerAddress() == null) {
             connection.setServerAddress(getTargetAddress(request));
         }
-        Bootstrap bootstrap = bootstrap(ctx, connection, request);
-        connect(ctx, connection, request, bootstrap);
+        Bootstrap bootstrap = bootstrap(connection, request);
+        ChannelFuture connectFuture = connect(connection, request, bootstrap);
+        handleConnectResult(ctx, connection, request, connectFuture);
     }
 
     /**
      * bootstrap
      */
-    protected Bootstrap bootstrap(ChannelHandlerContext ctx, Connection connection, T request) {
+    protected Bootstrap bootstrap(Connection connection, T request) {
         Bootstrap b = new Bootstrap();
-        b.group(ctx.channel().eventLoop())
+        b.group(connection.eventLoop())
                 .channel(NioSocketChannel.class)
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connection.getConnectTimeout())
                 .option(ChannelOption.SO_KEEPALIVE, true)
-                .handler(handler(ctx, connection, request));
+                .handler(handler(connection, request));
         return b;
     }
 
     /**
      * 处理器
      */
-    protected ChannelHandler handler(ChannelHandlerContext ctx, Connection connection, T request) {
-        Promise<Channel> promise = ctx.executor().newPromise();
+    protected ChannelHandler handler(Connection connection, T request) {
+        Promise<Channel> promise = connection.newPromise();
         promise.addListener((FutureListener<Channel>) future -> {
             // 设置代理到服务端的Channel
-            connection.setOutboundChannel(future.getNow());
+            connection.setServerChannel(future.getNow());
             if (future.isSuccess()) {
-                connectSuccess(ctx, connection, request);
+                connectSuccess(connection, request);
             } else {
-                // 连接失败重试
-                int connectRetryTimes = connection.getConnectRetryTimes();
-                if (connectRetryTimes > 0) {
-                    connection.setConnectRetryTimes(--connectRetryTimes);
-                    this.channelRead0(ctx, request);
-                } else {
-                    connectFail(ctx, connection, request, future.cause());
-                }
+                connectFail(connection, request, future.cause());
             }
         });
         return new DirectClientHandler(promise);
@@ -73,7 +67,7 @@ public abstract class AbstractConnectHandler<T> extends SimpleChannelInboundHand
     /**
      * 建立连接
      */
-    protected void connect(ChannelHandlerContext ctx, Connection connection, T request, Bootstrap bootstrap) {
+    protected ChannelFuture connect(Connection connection, T request, Bootstrap bootstrap) {
         InetSocketAddress address;
         if (config.getProxyFactory() != null) {
             Proxy.Type type;
@@ -87,21 +81,39 @@ public abstract class AbstractConnectHandler<T> extends SimpleChannelInboundHand
         } else {
             address = connection.getServerAddress();
         }
-        bootstrap.connect(address);
+        return bootstrap.connect(address);
+    }
+
+    /**
+     * 处理连接结果
+     */
+    protected void handleConnectResult(ChannelHandlerContext ctx, Connection connection, T request, ChannelFuture connectFuture) {
+        connectFuture.addListener(future -> {
+            if (!future.isSuccess()) {
+                // 连接失败重试
+                int connectRetryTimes = connection.getConnectRetryTimes();
+                if (connectRetryTimes > 0 && future.cause() instanceof ConnectTimeoutException) {
+                    connection.setConnectRetryTimes(--connectRetryTimes);
+                    this.channelRead0(ctx, request);
+                } else {
+                    connectFail(connection, request, future.cause());
+                }
+            }
+        });
     }
 
     /**
      * 连接成功
      */
-    protected void connectSuccess(ChannelHandlerContext ctx, Connection connection, T request) {
-        connection.getInboundPipeline().remove(this);
+    protected void connectSuccess(Connection connection, T request) {
+        connection.getClientPipeline().remove(this);
         connection.connect();
     }
 
     /**
      * 连接失败
      */
-    protected void connectFail(ChannelHandlerContext ctx, Connection connection, T request, Throwable cause) {
+    protected void connectFail(Connection connection, T request, Throwable cause) {
         log.debug("连接失败", cause);
         connection.close();
     }

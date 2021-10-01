@@ -32,9 +32,9 @@ public class HttpConnectHandler extends AbstractConnectHandler<HttpObject> {
     }
 
     @Override
-    protected void connectSuccess(ChannelHandlerContext ctx, Connection connection, HttpObject request) {
-        super.connectSuccess(ctx, connection, request);
-        connection.getOutboundPipeline().addFirst(new HttpClientCodec());
+    protected void connectSuccess(Connection connection, HttpObject request) {
+        super.connectSuccess(connection, request);
+        connection.getServerPipeline().addFirst(new HttpClientCodec());
         connection.flush();
     }
 }

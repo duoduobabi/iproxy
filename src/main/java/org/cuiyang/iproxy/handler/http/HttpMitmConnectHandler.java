@@ -2,7 +2,6 @@ package org.cuiyang.iproxy.handler.http;
 
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.ssl.SslHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -18,31 +17,31 @@ import java.net.InetSocketAddress;
  */
 @Slf4j
 @ChannelHandler.Sharable
-public class HttpMitmConnectHandler extends TunnelConnectHandler {
+public class HttpMitmConnectHandler extends HttpTunnelConnectHandler {
 
     @Override
-    protected void connectSuccess0(ChannelHandlerContext ctx, Connection connection, HttpObject msg) {
+    protected void connectSuccess0(Connection connection, HttpObject msg) {
         InetSocketAddress serverAddress = connection.getServerAddress();
         SSLEngine sslEngine = config.getMitmManager().serverSslEngine(serverAddress.getHostName(), serverAddress.getPort());
         SslHandler sslHandler = new SslHandler(sslEngine);
-        connection.getOutboundPipeline().addLast(sslHandler);
-        connection.getOutboundPipeline().addLast(new HttpClientCodec());
+        connection.getServerPipeline().addLast(sslHandler);
+        connection.getServerPipeline().addLast(new HttpClientCodec());
         sslHandler.handshakeFuture().addListener(f -> {
             if (!f.isSuccess()) {
                 log.debug("ssl握手失败", f.cause());
-                connectFail(ctx, connection, msg, f.cause());
+                connectFail(connection, msg, f.cause());
                 return;
             }
             HttpRequest request = (HttpRequest) msg;
-            ChannelFuture responseFuture = connection.getInboundChannel()
+            ChannelFuture responseFuture = connection.getClientChannel()
                     .writeAndFlush(new DefaultFullHttpResponse(request.protocolVersion(), HttpResponseStatus.OK));
             responseFuture.addListener(f2 -> {
                 if (!f2.isSuccess()) {
-                    connectFail(ctx, connection, msg, f2.cause());
+                    connectFail(connection, msg, f2.cause());
                     return;
                 }
-                connection.getInboundPipeline().addFirst(new SslHandler(config.getMitmManager().clientSslEngineFor(request, sslEngine.getSession())));;
-                connection.getInboundPipeline().remove(this);
+                connection.getClientPipeline().addFirst(new SslHandler(config.getMitmManager().clientSslEngineFor(request, sslEngine.getSession())));;
+                connection.getClientPipeline().remove(this);
                 connection.connect();
             });
         });

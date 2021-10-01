@@ -36,7 +36,7 @@ public abstract class AbstractAuthHandler<T> extends SimpleChannelInboundHandler
      */
     protected void buildConnection(ChannelHandlerContext ctx, T request, String username) {
         Connection connection = Connection.builder()
-                .inboundChannel(ctx.channel())
+                .clientChannel(ctx.channel())
                 .username(username)
                 .mitm(config.getMitmManager() != null)
                 .connectTimeout(config.getConnectTimeout())

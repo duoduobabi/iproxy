@@ -26,18 +26,18 @@ public class SocksConnectHandler extends AbstractConnectHandler<Socks5CommandReq
     }
 
     @Override
-    protected void connectSuccess(ChannelHandlerContext ctx, Connection connection, Socks5CommandRequest request) {
-        ChannelFuture responseFuture = ctx.channel().writeAndFlush(new DefaultSocks5CommandResponse(
+    protected void connectSuccess(Connection connection, Socks5CommandRequest request) {
+        ChannelFuture responseFuture = connection.getClientChannel().writeAndFlush(new DefaultSocks5CommandResponse(
                         Socks5CommandStatus.SUCCESS,
                         request.dstAddrType(),
                         request.dstAddr(),
                         request.dstPort()));
-        responseFuture.addListener(channelFuture -> super.connectSuccess(ctx, connection, request));
+        responseFuture.addListener(channelFuture -> super.connectSuccess(connection, request));
     }
 
     @Override
-    protected void connectFail(ChannelHandlerContext ctx, Connection connection, Socks5CommandRequest request, Throwable cause) {
-        ctx.channel().writeAndFlush(new DefaultSocks5CommandResponse(Socks5CommandStatus.FAILURE, request.dstAddrType()));
-        super.connectFail(ctx, connection, request, cause);
+    protected void connectFail(Connection connection, Socks5CommandRequest request, Throwable cause) {
+        connection.getClientChannel().writeAndFlush(new DefaultSocks5CommandResponse(Socks5CommandStatus.FAILURE, request.dstAddrType()));
+        super.connectFail(connection, request, cause);
     }
 }
