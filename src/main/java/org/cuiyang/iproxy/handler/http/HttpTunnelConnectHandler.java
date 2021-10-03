@@ -48,15 +48,18 @@ public class HttpTunnelConnectHandler extends HttpConnectHandler {
                     promise.setFailure(cause);
                 }
             });
-            connection.getServerPipeline().writeAndFlush(request);
+            connection.getServerPipeline().writeAndFlush(request).addListener(f -> {
+                if (!f.isSuccess()) {
+                    connectFail(connection, msg, f.cause());
+                }
+            });
         }
     }
 
     protected void connectSuccess0(Connection connection, HttpObject msg) {
         HttpRequest request = (HttpRequest) msg;
-        ChannelFuture responseFuture = connection.getClientChannel()
-                .writeAndFlush(new DefaultFullHttpResponse(request.protocolVersion(), HttpResponseStatus.OK));
-        responseFuture.addListener(f -> {
+        DefaultFullHttpResponse response = new DefaultFullHttpResponse(request.protocolVersion(), HttpResponseStatus.OK);
+        connection.getClientChannel().writeAndFlush(response).addListener(f -> {
             if (!f.isSuccess()) {
                 connectFail(connection, msg, f.cause());
                 return;

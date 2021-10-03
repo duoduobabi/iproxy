@@ -1,6 +1,5 @@
 package org.cuiyang.iproxy.handler.http;
 
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.ssl.SslHandler;
@@ -33,9 +32,8 @@ public class HttpMitmConnectHandler extends HttpTunnelConnectHandler {
                 return;
             }
             HttpRequest request = (HttpRequest) msg;
-            ChannelFuture responseFuture = connection.getClientChannel()
-                    .writeAndFlush(new DefaultFullHttpResponse(request.protocolVersion(), HttpResponseStatus.OK));
-            responseFuture.addListener(f2 -> {
+            DefaultFullHttpResponse response = new DefaultFullHttpResponse(request.protocolVersion(), HttpResponseStatus.OK);
+            connection.getClientChannel().writeAndFlush(response).addListener(f2 -> {
                 if (!f2.isSuccess()) {
                     connectFail(connection, msg, f2.cause());
                     return;

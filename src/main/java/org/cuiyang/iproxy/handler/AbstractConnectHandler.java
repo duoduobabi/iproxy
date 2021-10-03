@@ -136,7 +136,7 @@ public abstract class AbstractConnectHandler<T> extends SimpleChannelInboundHand
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         log.error("连接处理器异常", cause);
-        ProxyServerUtils.closeOnFlush(ctx.channel());
+        Connection.currentConnection(ctx).close();
     }
 
     @Override
