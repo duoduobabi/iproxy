@@ -1,6 +1,8 @@
 package org.cuiyang.iproxy.handler.socks;
 
+import io.netty.channel.ChannelPipeline;
 import org.cuiyang.iproxy.Attributes;
+import org.cuiyang.iproxy.Connection;
 import org.cuiyang.iproxy.ProxyServerUtils;
 import org.cuiyang.iproxy.handler.AbstractAuthHandler;
 import io.netty.channel.ChannelHandler;
@@ -26,6 +28,7 @@ public class SocksAuthHandler extends AbstractAuthHandler<SocksMessage> {
                 ProxyServerUtils.closeOnFlush(ctx.channel());
                 return;
             case SOCKS5:
+                Connection connection = Connection.currentConnection(ctx);
                 if (socksRequest instanceof Socks5InitialRequest) {
                     if (config.getProxyAuthenticator() == null) {
                         ctx.pipeline().addFirst(new Socks5CommandRequestDecoder());
@@ -36,18 +39,17 @@ public class SocksAuthHandler extends AbstractAuthHandler<SocksMessage> {
                     }
                 } else if (socksRequest instanceof Socks5PasswordAuthRequest) {
                     DefaultSocks5PasswordAuthRequest request = (DefaultSocks5PasswordAuthRequest) socksRequest;
-                    if (authenticate(request.username(), request.password())) {
+                    if (authenticate(connection, request.username(), request.password())) {
                         ctx.channel().attr(Attributes.USERNAME).set(request.username());
                         ctx.pipeline().addFirst(new Socks5CommandRequestDecoder());
                         ctx.writeAndFlush(new DefaultSocks5PasswordAuthResponse(Socks5PasswordAuthStatus.SUCCESS));
                     } else {
-                        authenticateFail(ctx, socksRequest);
+                        authenticateFail(connection, socksRequest);
                     }
                 } else if (socksRequest instanceof Socks5CommandRequest) {
                     Socks5CommandRequest request = (Socks5CommandRequest) socksRequest;
                     if (request.type() == Socks5CommandType.CONNECT) {
-                        buildConnection(ctx, request, ctx.channel().attr(Attributes.USERNAME).get());
-                        authenticateSuccess(ctx, request);
+                        authenticateSuccess(connection, request);
                     } else {
                         ProxyServerUtils.closeOnFlush(ctx.channel());
                     }
@@ -63,15 +65,16 @@ public class SocksAuthHandler extends AbstractAuthHandler<SocksMessage> {
     }
 
     @Override
-    protected void authenticateSuccess(ChannelHandlerContext ctx, SocksMessage request) {
-        ctx.pipeline().addLast(config.getSocksConnectHandler());
-        ctx.pipeline().remove(this);
-        ctx.fireChannelRead(request);
+    protected void authenticateSuccess(Connection connection, SocksMessage request) {
+        ChannelPipeline pipeline = connection.getClientPipeline();
+        pipeline.addLast(config.getSocksConnectHandler());
+        pipeline.remove(this);
+        pipeline.fireChannelRead(request);
     }
 
     @Override
-    protected void authenticateFail(ChannelHandlerContext ctx, SocksMessage request) {
-        ctx.writeAndFlush(new DefaultSocks5PasswordAuthResponse(Socks5PasswordAuthStatus.FAILURE));
-        ProxyServerUtils.closeOnFlush(ctx.channel());
+    protected void authenticateFail(Connection connection, SocksMessage request) {
+        connection.response(new DefaultSocks5PasswordAuthResponse(Socks5PasswordAuthStatus.FAILURE));
+        connection.close();
     }
 }

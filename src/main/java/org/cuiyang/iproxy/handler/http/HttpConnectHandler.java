@@ -23,11 +23,9 @@ public class HttpConnectHandler extends AbstractConnectHandler<HttpObject> {
     @Override
     public void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
         Connection connection = Connection.currentConnection(ctx);
-        connection.write(msg);
+        connection.request(msg);
         if (msg instanceof HttpRequest) {
-            HttpRequest request = (HttpRequest) msg;
-            log.info("{} {} {}", request.method(), request.uri(), request.protocolVersion());
-            super.channelRead0(ctx, request);
+            super.channelRead0(ctx, msg);
         }
     }
 

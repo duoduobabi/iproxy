@@ -4,24 +4,22 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoop;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.util.ReferenceCounted;
 import io.netty.util.concurrent.Promise;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.cuiyang.iproxy.handler.RelayHandler;
 
 import java.io.Closeable;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class Connection implements Closeable {
+public class Connection implements Closeable, ProxyConfigHolder {
+    private String id = UUID.randomUUID().toString().replace("-", "");
+    /** config */
+    private ProxyConfig config;
     /** 客户端到代理 */
     private Channel clientChannel;
     /** 代理到服务端 */
@@ -36,7 +34,7 @@ public class Connection implements Closeable {
     private int connectTimeout;
     /** 连接重试次数 */
     private int connectRetryTimes;
-    @Builder.Default
+    /** 临时消息 */
     private List<Object> messages = new ArrayList<>();
 
     public static Connection currentConnection(ChannelHandlerContext ctx) {
@@ -52,8 +50,8 @@ public class Connection implements Closeable {
     }
 
     public void connect() {
-        getClientPipeline().addLast(new RelayHandler(serverChannel));
-        getServerPipeline().addLast(new RelayHandler(clientChannel));
+        getClientPipeline().addLast(config.newRelayHandler(this, serverChannel));
+        getServerPipeline().addLast(config.newRelayHandler(this, clientChannel));
     }
 
     public EventLoop eventLoop() {
@@ -64,7 +62,11 @@ public class Connection implements Closeable {
         return this.eventLoop().newPromise();
     }
 
-    public void write(Object msg) {
+    public boolean isSsl() {
+        return getClientPipeline().context(SslHandler.class) != null;
+    }
+
+    public void request(Object msg) {
         if (serverChannel != null) {
             serverChannel.writeAndFlush(msg);
         } else {
@@ -75,6 +77,10 @@ public class Connection implements Closeable {
         }
     }
 
+    public void response(Object msg) {
+        clientChannel.writeAndFlush(msg);
+    }
+
     public void flush() {
         messages.forEach(msg -> clientChannel.pipeline().fireChannelRead(msg));
         messages.clear();
@@ -83,5 +89,10 @@ public class Connection implements Closeable {
     @Override
     public void close() {
         ProxyServerUtils.closeOnFlush(clientChannel, serverChannel);
+    }
+
+    @Override
+    public void holdConfig(ProxyConfig config) {
+        this.config = config;
     }
 }

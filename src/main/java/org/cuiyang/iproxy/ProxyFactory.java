@@ -5,7 +5,7 @@ package org.cuiyang.iproxy;
  *
  * @author cuiyang
  */
-public interface ProxyFactory extends ProxyConfigHolder {
+public interface ProxyFactory {
 
     Proxy getProxy(Proxy.Type type);
 }

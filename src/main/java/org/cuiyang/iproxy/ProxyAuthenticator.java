@@ -5,7 +5,7 @@ package org.cuiyang.iproxy;
  *
  * @author cuiyang
  */
-public interface ProxyAuthenticator extends ProxyConfigHolder{
+public interface ProxyAuthenticator {
 
     /**
      * 认证

@@ -19,7 +19,8 @@ public abstract class AbstractAuthHandler<T> extends SimpleChannelInboundHandler
     /**
      * 认证
      */
-    protected boolean authenticate(String username, String password) {
+    protected boolean authenticate(Connection connection, String username, String password) {
+        connection.setUsername(username);
         if (config.getProxyAuthenticator() == null) {
             return true;
         }
@@ -32,28 +33,14 @@ public abstract class AbstractAuthHandler<T> extends SimpleChannelInboundHandler
     }
 
     /**
-     * 构建Connection
-     */
-    protected void buildConnection(ChannelHandlerContext ctx, T request, String username) {
-        Connection connection = Connection.builder()
-                .clientChannel(ctx.channel())
-                .username(username)
-                .mitm(config.getMitmManager() != null)
-                .connectTimeout(config.getConnectTimeout())
-                .connectRetryTimes(config.getConnectRetryTimes())
-                .build();
-        ctx.channel().attr(Attributes.CONNECTION).set(connection);
-    }
-
-    /**
      * 认证成功
      */
-    protected abstract void authenticateSuccess(ChannelHandlerContext ctx, T request);
+    protected abstract void authenticateSuccess(Connection connection, T request);
 
     /**
      * 认证失败
      */
-    protected abstract void authenticateFail(ChannelHandlerContext ctx, T request);
+    protected abstract void authenticateFail(Connection connection, T request);
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {

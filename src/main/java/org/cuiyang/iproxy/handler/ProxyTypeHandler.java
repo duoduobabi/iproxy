@@ -1,8 +1,6 @@
 package org.cuiyang.iproxy.handler;
 
-import org.cuiyang.iproxy.ProxyConfig;
-import org.cuiyang.iproxy.ProxyConfigHolder;
-import org.cuiyang.iproxy.ProxyServerUtils;
+import org.cuiyang.iproxy.*;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -46,6 +44,8 @@ public class ProxyTypeHandler extends SimpleChannelInboundHandler<ByteBuf> imple
         }
         p.remove(this);
         msg.retain();
+        // 设置连接
+        ctx.channel().attr(Attributes.CONNECTION).set(config.newConnection(ctx.channel()));
         ctx.fireChannelRead(msg);
     }
 

@@ -1,5 +1,6 @@
 package org.cuiyang.iproxy.handler.http;
 
+import io.netty.channel.ChannelPipeline;
 import org.cuiyang.iproxy.Connection;
 import org.cuiyang.iproxy.handler.AbstractAuthHandler;
 import io.netty.channel.ChannelHandler;
@@ -36,16 +37,16 @@ public class HttpAuthHandler extends AbstractAuthHandler<HttpRequest> {
                 log.debug("解析Http Basic认证失败", e);
             }
         }
-        if (authenticate(username, password)) {
-            buildConnection(ctx, request, username);
-            authenticateSuccess(ctx, request);
+        Connection connection = Connection.currentConnection(ctx);
+        if (authenticate(connection, username, password)) {
+            authenticateSuccess(connection, request);
         } else {
-            authenticateFail(ctx, request);
+            authenticateFail(connection, request);
         }
     }
 
     @Override
-    protected void authenticateSuccess(ChannelHandlerContext ctx, HttpRequest request) {
+    protected void authenticateSuccess(Connection connection, HttpRequest request) {
         HttpHeaders headers = request.headers();
         headers.remove(HttpHeaderNames.PROXY_AUTHORIZATION);
         String proxyConnectionKey = "Proxy-Connection";
@@ -54,24 +55,25 @@ public class HttpAuthHandler extends AbstractAuthHandler<HttpRequest> {
             headers.remove(proxyConnectionKey);
             headers.set(HttpHeaderNames.CONNECTION, header);
         }
+        ChannelPipeline pipeline = connection.getClientPipeline();
         if (request.method().equals(HttpMethod.CONNECT)) {
-            if (Connection.currentConnection(ctx).isMitm()) {
-                ctx.pipeline().addLast(config.getHttpMitmConnectHandler());
+            if (connection.isMitm()) {
+                pipeline.addLast(config.getHttpMitmConnectHandler());
             } else {
-                ctx.pipeline().addLast(config.getHttpTunnelConnectHandler());
+                pipeline.addLast(config.getHttpTunnelConnectHandler());
             }
         } else {
-            ctx.pipeline().addLast(config.getHttpConnectHandler());
+            pipeline.addLast(config.getHttpConnectHandler());
         }
-        ctx.pipeline().remove(this);
-        ctx.fireChannelRead(request);
+        pipeline.remove(this);
+        pipeline.fireChannelRead(request);
     }
 
     @Override
-    protected void authenticateFail(ChannelHandlerContext ctx, HttpRequest request) {
+    protected void authenticateFail(Connection connection, HttpRequest request) {
         FullHttpResponse response = new DefaultFullHttpResponse(request.protocolVersion(),
                 HttpResponseStatus.PROXY_AUTHENTICATION_REQUIRED);
         response.headers().set(HttpHeaderNames.PROXY_AUTHENTICATE, "Basic");
-        ctx.channel().writeAndFlush(response);
+        connection.response(response);
     }
 }

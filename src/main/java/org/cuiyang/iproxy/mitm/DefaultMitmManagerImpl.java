@@ -10,6 +10,8 @@ import lombok.SneakyThrows;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.cuiyang.iproxy.MitmManager;
+import org.cuiyang.iproxy.ProxyConfig;
+import org.cuiyang.iproxy.ProxyConfigHolder;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -22,16 +24,17 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-public class DefaultMitmManagerImpl implements MitmManager {
+public class DefaultMitmManagerImpl implements MitmManager, ProxyConfigHolder {
     private static final String KEY_STORE_TYPE = "PKCS12";
     private static final String KEY_STORE_FILE_EXTENSION = ".p12";
     private static final String PEM_FILE_EXTENSION = ".pem";
 
-    private Authority authority;
-    private Certificate caCert;
-    private PrivateKey caPrivateKey;
-    private SslContext sslContext;
-    private Cache<String, SslContext> serverSSLContexts;
+    protected ProxyConfig config;
+    protected Authority authority;
+    protected Certificate caCert;
+    protected PrivateKey caPrivateKey;
+    protected SslContext sslContext;
+    protected Cache<String, SslContext> serverSSLContexts;
 
     @SneakyThrows
     public DefaultMitmManagerImpl(Authority authority) {
@@ -120,5 +123,10 @@ public class DefaultMitmManagerImpl implements MitmManager {
             }
         }
         throw new IllegalStateException("Missed CN in Subject DN: " + c.getSubjectDN());
+    }
+
+    @Override
+    public void holdConfig(ProxyConfig config) {
+        this.config = config;
     }
 }

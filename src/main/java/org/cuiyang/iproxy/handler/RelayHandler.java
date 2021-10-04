@@ -1,5 +1,9 @@
 package org.cuiyang.iproxy.handler;
 
+import lombok.Setter;
+import org.cuiyang.iproxy.Connection;
+import org.cuiyang.iproxy.ProxyConfig;
+import org.cuiyang.iproxy.ProxyConfigHolder;
 import org.cuiyang.iproxy.ProxyServerUtils;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -12,12 +16,12 @@ import lombok.extern.slf4j.Slf4j;
  * @author cuiyang
  */
 @Slf4j
-public class RelayHandler extends ChannelInboundHandlerAdapter {
-    protected final Channel relayChannel;
-
-    public RelayHandler(Channel relayChannel) {
-        this.relayChannel = relayChannel;
-    }
+public class RelayHandler extends ChannelInboundHandlerAdapter implements ProxyConfigHolder {
+    protected ProxyConfig config;
+    @Setter
+    protected Connection connection;
+    @Setter
+    protected Channel relayChannel;
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
@@ -27,7 +31,12 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         if (relayChannel.isActive()) {
-            relayChannel.writeAndFlush(msg);
+            if (config.getInterceptor() != null) {
+                msg = config.getInterceptor().message(connection, msg);
+            }
+            if (msg != null) {
+                relayChannel.writeAndFlush(msg);
+            }
         } else {
             ReferenceCountUtil.release(msg);
         }
@@ -41,5 +50,10 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         ctx.close();
+    }
+
+    @Override
+    public void holdConfig(ProxyConfig config) {
+        this.config = config;
     }
 }

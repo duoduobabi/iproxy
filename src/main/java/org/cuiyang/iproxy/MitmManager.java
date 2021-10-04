@@ -6,7 +6,7 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLSession;
 
 
-public interface MitmManager extends ProxyConfigHolder {
+public interface MitmManager {
 
     SSLEngine serverSslEngine(String peerHost, int peerPort);
 

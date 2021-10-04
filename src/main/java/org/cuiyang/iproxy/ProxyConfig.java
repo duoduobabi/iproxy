@@ -1,17 +1,19 @@
 package org.cuiyang.iproxy;
 
+import io.netty.channel.Channel;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
 import lombok.Builder;
-import org.cuiyang.iproxy.handler.*;
+import lombok.Getter;
+import lombok.SneakyThrows;
+import org.cuiyang.iproxy.handler.ProxyTypeHandler;
+import org.cuiyang.iproxy.handler.RelayHandler;
 import org.cuiyang.iproxy.handler.http.HttpAuthHandler;
 import org.cuiyang.iproxy.handler.http.HttpConnectHandler;
 import org.cuiyang.iproxy.handler.http.HttpMitmConnectHandler;
 import org.cuiyang.iproxy.handler.http.HttpTunnelConnectHandler;
 import org.cuiyang.iproxy.handler.socks.SocksAuthHandler;
 import org.cuiyang.iproxy.handler.socks.SocksConnectHandler;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import lombok.Getter;
-import lombok.SneakyThrows;
 
 /**
  * 代理配置
@@ -38,6 +40,9 @@ public class ProxyConfig {
     private HttpMitmConnectHandler httpMitmConnectHandler;
     private SocksAuthHandler socksAuthHandler;
     private SocksConnectHandler socksConnectHandler;
+    private Class<? extends RelayHandler> relayHandler;
+    private Class<? extends Connection> connection;
+    private Interceptor interceptor;
 
     @Builder
     public ProxyConfig(Integer port, Integer connectTimeout, Integer connectRetryTimes,
@@ -51,7 +56,10 @@ public class ProxyConfig {
                        HttpTunnelConnectHandler httpTunnelConnectHandler,
                        HttpMitmConnectHandler httpMitmConnectHandler,
                        SocksAuthHandler socksAuthHandler,
-                       SocksConnectHandler socksConnectHandler) {
+                       SocksConnectHandler socksConnectHandler,
+                       Class<? extends RelayHandler> relayHandler,
+                       Class<? extends Connection> connection,
+                       Interceptor interceptor) {
         this.port = port == null ? DEFAULT_PORT : port;
         this.connectTimeout = connectTimeout == null ? DEFAULT_CONNECT_TIMEOUT : connectTimeout;
         this.connectRetryTimes = connectRetryTimes == null ? DEFAULT_CONNECT_RETRY_TIMES : connectRetryTimes;
@@ -70,8 +78,29 @@ public class ProxyConfig {
         this.httpMitmConnectHandler = get(httpMitmConnectHandler, HttpMitmConnectHandler.class);
         this.socksAuthHandler = get(socksAuthHandler, SocksAuthHandler.class);
         this.socksConnectHandler = get(socksConnectHandler, SocksConnectHandler.class);
+
+        this.relayHandler = relayHandler == null ? RelayHandler.class : relayHandler;
+        this.connection = connection == null ? Connection.class : connection;
+        this.interceptor = holdConfig(interceptor);
     }
 
+    @SneakyThrows
+    public Connection newConnection(Channel clientChannel) {
+        Connection connection = this.connection.newInstance();
+        connection.setClientChannel(clientChannel);
+        connection.setMitm(this.getMitmManager() != null);
+        connection.setConnectTimeout(this.getConnectTimeout());
+        connection.setConnectRetryTimes(this.getConnectRetryTimes());
+        return holdConfig(connection);
+    }
+
+    @SneakyThrows
+    public RelayHandler newRelayHandler(Connection connection, Channel relayChannel) {
+        RelayHandler relayHandler = this.relayHandler.newInstance();
+        relayHandler.setConnection(connection);
+        relayHandler.setRelayChannel(relayChannel);
+        return holdConfig(relayHandler);
+    }
     @SneakyThrows
     private <T> T get(T o, Class<T> clazz) {
         if (o == null) {
