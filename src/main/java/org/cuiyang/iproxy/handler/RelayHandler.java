@@ -32,7 +32,7 @@ public class RelayHandler extends ChannelInboundHandlerAdapter implements ProxyC
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         if (relayChannel.isActive()) {
             if (config.getInterceptor() != null) {
-                msg = config.getInterceptor().message(connection, msg);
+                msg = config.getInterceptor().intercept(connection, msg);
             }
             if (msg != null) {
                 relayChannel.writeAndFlush(msg);

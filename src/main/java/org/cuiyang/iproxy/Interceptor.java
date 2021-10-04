@@ -13,5 +13,5 @@ public interface Interceptor extends ProxyConfigHolder {
      * @param message 消息
      * @return 修改后的消息, 如果返回null, 则终止消息传递
      */
-    Object message(Connection connection, Object message);
+    Object intercept(Connection connection, Object message);
 }
